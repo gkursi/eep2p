@@ -7,15 +7,13 @@ use tokio_util::codec::{
     LengthDelimitedCodec
 };
 use tokio_serde::formats::SymmetricalMessagePack;
-use crate::packet::{Packet, Intent};
+use crate::packet::Packet;
 use crate::handler::{
-    PacketHandler,
     Handler,
     setup::SetupPacketHandler
 };
 use crate::handler::setup::Side;
 use crate::encrypt::EncryptionHandler;
-use std::sync::Arc;
 use futures_util::{SinkExt, TryStreamExt};
 
 pub enum Message {
@@ -45,12 +43,12 @@ impl ConnectionInfo {
     pub fn start(&mut self) {
         let channel_a = self.create_channel();
         let channel_b = self.create_channel();
-        let mut events = self.events.take()
+        let events = self.events.take()
             .expect("start called twice");
         let (read, write) = self.stream.take()
             .expect("start called twice")
             .into_split();
-        let mut state = self.state.take()
+        let state = self.state.take()
             .expect("start called twice");
         
 
@@ -138,7 +136,7 @@ impl ConnectionInfo {
     }
 }
 
-pub fn handle(stream: TcpStream, side: Side) -> ConnectionInfo {
+pub fn handle(stream: TcpStream, _side: Side) -> ConnectionInfo {
     let (channel, events) = mpsc::unbounded_channel();
 
     ConnectionInfo {

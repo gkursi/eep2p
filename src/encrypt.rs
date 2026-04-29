@@ -10,8 +10,7 @@ use aes_gcm::{
         OsRng,
     },
     Aes256Gcm, 
-    Key, 
-    Nonce,
+    Key,
 };
 
 pub struct EncryptionHandler {

@@ -1,5 +1,5 @@
 use crate::handler::{Handler, PacketHandler};
-use crate::con::{ConnectionState, Message};
+use crate::con::Message;
 use crate::packet::Packet;
 use tokio::sync::mpsc::UnboundedSender;
 use crate::encrypt::EncryptionHandler;
@@ -14,7 +14,7 @@ pub enum Side {
 pub struct SetupPacketHandler;
 
 impl PacketHandler for SetupPacketHandler {
-    fn handle(self, packet: Packet, channel: &UnboundedSender<Message>, encrypt: &mut EncryptionHandler) -> Handler {
+    fn handle(self, packet: Packet, _channel: &UnboundedSender<Message>, encrypt: &mut EncryptionHandler) -> Handler {
         match packet {
             Packet::KeyPacket(public) => {
                 let shared = encrypt.x25_secret

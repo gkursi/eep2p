@@ -2,7 +2,7 @@ pub mod setup;
 pub mod fwd;
 pub mod sync;
 
-use crate::con::{ConnectionState, Message};
+use crate::con::Message;
 use crate::packet::Packet;
 use crate::encrypt::EncryptionHandler;
 use tokio::sync::mpsc::UnboundedSender;
