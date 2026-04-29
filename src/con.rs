@@ -63,7 +63,7 @@ impl ConnectionInfo {
         });
         
         // handles incoming packets
-        Ftokio::spawn(async move {
+        tokio::spawn(async move {
             Self::read(channel_b, read).await;
             println!("Reader exit");
         });
