@@ -2,13 +2,11 @@ pub mod hosts;
 pub mod id;
 
 use hosts::Hosts;
-use id::Identifier;
 use std::fs::{self, File};
 use std::path::Path;
 use std::io::Write;
 use aes_gcm::aead::OsRng;
 use ed25519_dalek::SigningKey;
-use ed25519_dalek::Signature;
 use serde::{Serialize, Deserialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -36,9 +34,9 @@ impl Config {
 
             config.write_to(path);
             panic!("First run! Please setup pgp keys at {path}.");
-        } else {
-            return Self::read_from(path)
-        };
+        }
+            
+        Self::read_from(path)
     }
 
     pub fn write_to(&self, path: &str) {

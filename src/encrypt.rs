@@ -66,9 +66,12 @@ impl EncryptionHandler {
             panic!("Decrypt called before key exchange");
         };
 
-        let decrypted = cipher.decrypt(&nonce, data)
-            .expect("failed to encrypt");
-        
-        decrypted    
+        cipher.decrypt(&nonce, data).expect("failed to encrypt")
+    }
+}
+
+impl Default for EncryptionHandler {
+    fn default() -> Self {
+        Self::new()
     }
 }

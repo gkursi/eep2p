@@ -16,6 +16,10 @@ use crate::handler::setup::Side;
 use crate::encrypt::EncryptionHandler;
 use futures_util::{SinkExt, TryStreamExt};
 
+// TODO General cleanup
+// TODO Fix memory leak
+// TODO Fix thread lifetimes
+
 pub enum Message {
     StartExchange,
     Packet(Packet),
@@ -59,7 +63,7 @@ impl ConnectionInfo {
         });
         
         // handles incoming packets
-        tokio::spawn(async move {
+        Ftokio::spawn(async move {
             Self::read(channel_b, read).await;
             println!("Reader exit");
         });
