@@ -103,6 +103,9 @@ impl ConnectionInfo {
                             let bytes = state.encryption.decrypt(&bytes, nonce);
                             packet = rmp_serde::from_slice::<Packet>(&bytes)
                                 .expect("failed to decode packet");
+
+                            dbg!("Decrypted packet: ");
+                            dbg!(&packet);
                         }
 
                         dbg!(&packet);
@@ -119,7 +122,13 @@ impl ConnectionInfo {
                             .unwrap();
                     },
 
-                    Message::SendPacket(p) => serialize.send(p).await.unwrap(),
+                    Message::SendPacket(p) => {
+                        let (d, n) = state.encryption.encrypt(
+                            &rmp_serde::to_vec(&p).unwrap()
+                        );
+
+                        serialize.send(Packet::EncryptedPacket(n, d)).await.unwrap()
+                    },
 
                     Message::End => {
                         println!("Received end, closing connection");

@@ -1,4 +1,4 @@
 use serde::{Serialize, Deserialize};
 
-#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
-pub struct Hosts(Vec<String>);
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Hosts(pub Vec<String>);
