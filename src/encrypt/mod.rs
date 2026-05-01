@@ -1,13 +1,13 @@
-pub mod pgp;
 pub mod aes;
+pub mod pgp;
 
-use aes_gcm::aead::{Aead, AeadCore, KeyInit, OsRng};
-use aes_gcm::{Aes256Gcm, Key};
-use generic_array::GenericArray;
-use hkdf::Hkdf;
-use ::pgp::composed::{Deserializable, Message, SignedSecretKey};
+use ::pgp::composed::{Deserializable, SignedSecretKey};
 use ::pgp::types::Password;
+use aes_gcm::aead::KeyInit;
+use aes_gcm::{Aes256Gcm, Key};
+use hkdf::Hkdf;
 use sha2::Sha256;
+use thiserror::Error;
 use x25519_dalek::{EphemeralSecret, PublicKey};
 
 use crate::Config;
@@ -18,12 +18,17 @@ pub struct GlobalKeys {
     pgp_pass: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum EncryptError {
+    #[error("failed to derive key")]
     KeyDeriveError,
+    #[error("failed to decode pgp-encrypted message")]
     MessageDecodeError,
+    #[error("failed to decrypt pgp message")]
     PgpDecryptError,
+    #[error("failed to encrypt with aes")]
     AesEncryptError,
+    #[error("failed to decrypt with aes")]
     AesDecryptError,
 }
 

@@ -1,25 +1,14 @@
-use aes_gcm::aead::{Aead, AeadCore, KeyInit, OsRng};
-use aes_gcm::{Aes256Gcm, Key};
+use aes_gcm::Aes256Gcm;
+use aes_gcm::aead::{Aead, AeadCore, OsRng};
 use generic_array::GenericArray;
-use hkdf::Hkdf;
-use pgp::composed::{Deserializable, Message, SignedSecretKey};
-use pgp::types::Password;
-use sha2::Sha256;
-use x25519_dalek::{EphemeralSecret, PublicKey};
 use typenum::consts::U12;
-use crate::encrypt::{EncryptionHandler, EncryptError};
+
+use crate::encrypt::{EncryptError, EncryptionHandler};
 
 pub trait Aes {
-    fn encrypt(
-        &self,
-        data: &[u8],
-    ) -> Result<(GenericArray<u8, U12>, Vec<u8>), EncryptError>;
+    fn encrypt(&self, data: &[u8]) -> Result<(GenericArray<u8, U12>, Vec<u8>), EncryptError>;
 
-    fn decrypt(
-        &self,
-        data: &[u8],
-        nonce: GenericArray<u8, U12>,
-    ) -> Result<Vec<u8>, EncryptError>;
+    fn decrypt(&self, data: &[u8], nonce: GenericArray<u8, U12>) -> Result<Vec<u8>, EncryptError>;
 }
 
 impl Aes for EncryptionHandler {

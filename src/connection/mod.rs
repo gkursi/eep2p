@@ -6,18 +6,18 @@ use futures_util::{SinkExt, TryStreamExt};
 use handler::setup::SetupPacketHandler;
 use handler::{Handler, HandlerError, PacketHandler};
 use packet::Packet;
-use state::{Callback, Channel, ConnectionError, ConnectionState, Message};
+use state::{Callback, Channel, ConnectionError, ConnectionState, Message, Receiver};
 use tokio::net::TcpStream;
 use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
-use tokio::sync::mpsc::{self, UnboundedReceiver};
+use tokio::sync::mpsc;
 use tokio_serde::formats::SymmetricalMessagePack;
 use tokio_util::codec::{FramedRead, FramedWrite, LengthDelimitedCodec};
 
-use crate::encrypt::{EncryptionHandler, GlobalKeys};
 use crate::encrypt::aes::Aes;
+use crate::encrypt::{EncryptionHandler, GlobalKeys};
 
 pub struct ConnectionInfo {
-    pub events: Option<UnboundedReceiver<Message>>,
+    pub events: Option<Receiver>,
     pub channel: Channel,
     pub stream: Option<TcpStream>,
     pub state: Option<ConnectionState>,
@@ -42,7 +42,7 @@ impl ConnectionInfo {
 
         tokio::spawn(async move {
             if let Err(e) = Self::handle(&mut events, channel, write, state).await {
-                println!("Error in connection: {:?}", e);
+                println!("Error in connection: {e:?}");
             }
 
             events.close();
@@ -85,7 +85,7 @@ impl ConnectionInfo {
 
     /// Handles messages and sends packets
     async fn handle(
-        events: &mut UnboundedReceiver<Message>,
+        events: &mut Receiver,
         input: Channel,
         output: OwnedWriteHalf,
         mut state: ConnectionState,
@@ -98,98 +98,97 @@ impl ConnectionInfo {
         );
 
         loop {
-            let msg = events.recv().await;
+            let Some(msg) = events.recv().await else {
+                return Ok(());
+            };
 
-            if let Some(msg) = msg {
-                match msg {
-                    Message::Packet(packet) => {
-                        let mut packet = packet;
+            match msg {
+                Message::Packet(packet) => {
+                    let mut packet = packet;
 
-                        if let Packet::EncryptedPacket(bytes, nonce) = packet {
-                            let bytes = state
-                                .encryption
-                                .decrypt(&bytes, nonce)
-                                .map_err(ConnectionError::EncryptError)?;
-
-                            packet = rmp_serde::from_slice::<Packet>(&bytes)
-                                .map_err(|_| ConnectionError::SerializationError)?;
-
-                            dbg!("Decrypted packet: ");
-                            dbg!(&packet);
-                        }
-
-                        if let Packet::CommonKeyPacket(_) = packet {
-                            state.recv_key = true;
-                            Self::invoke_callback(&input, &mut state);
-                        }
-
-                        dbg!(&packet);
-                        state.handler = state
-                            .handler
-                            .handle(packet, &input, &mut state.encryption)
-                            .map_err(ConnectionError::HandlerError)?;
-                    }
-
-                    Message::StartExchange => {
-                        serialize
-                            .send(Packet::CommonKeyPacket(
-                                state
-                                    .encryption
-                                    .x25_public
-                                    .take()
-                                    .expect("StartExchange sent twice"),
-                            ))
-                            .await
-                            .map_err(|_| ConnectionError::SerializationError)?;
-
-                        state.sent_key = true;
-                        Self::invoke_callback(&input, &mut state);
-                    }
-
-                    Message::SendPacket(p) => {
-                        let (d, n) = state
+                    if let Packet::EncryptedPacket(bytes, nonce) = packet {
+                        let bytes = state
                             .encryption
-                            .encrypt(
-                                &rmp_serde::to_vec(&p)
-                                    .map_err(|_| ConnectionError::SerializationError)?,
-                            )
+                            .decrypt(&bytes, nonce)
                             .map_err(ConnectionError::EncryptError)?;
 
-                        serialize
-                            .send(Packet::EncryptedPacket(n, d))
-                            .await
-                            .map_err(|_| ConnectionError::IOError)?
+                        packet = rmp_serde::from_slice::<Packet>(&bytes)
+                            .map_err(|_| ConnectionError::SerializationError)?;
                     }
 
-                    Message::End => {
-                        println!("Closing connection");
-                        return Ok(());
+                    if let Packet::CommonKeyPacket(_) = packet {
+                        state.recv_key = true;
+                        Self::invoke_callback(&input, &mut state)?;
                     }
 
-                    Message::EndError(err) => {
-                        return Err(err);
-                    }
-                };
+                    state.handler = state
+                        .handler
+                        .handle(packet, &input, &mut state.encryption)
+                        .map_err(ConnectionError::HandlerError)?;
+                }
 
-                continue;
-            }
+                Message::StartExchange => {
+                    serialize
+                        .send(Packet::CommonKeyPacket(
+                            state
+                                .encryption
+                                .x25_public
+                                .take()
+                                .expect("StartExchange sent twice"),
+                        ))
+                        .await
+                        .map_err(|_| ConnectionError::SerializationError)?;
 
-            return Ok(());
+                    state.sent_key = true;
+                    Self::invoke_callback(&input, &mut state)?;
+                }
+
+                Message::SendPacket(p) => {
+                    let (d, n) = state
+                        .encryption
+                        .encrypt(
+                            &rmp_serde::to_vec(&p)
+                                .map_err(|_| ConnectionError::SerializationError)?,
+                        )
+                        .map_err(ConnectionError::EncryptError)?;
+
+                    serialize
+                        .send(Packet::EncryptedPacket(n, d))
+                        .await
+                        .map_err(|_| ConnectionError::IOError)?
+                }
+
+                Message::End => {
+                    println!("Closing connection");
+                    return Ok(());
+                }
+
+                Message::EndError(err) => {
+                    return Err(err);
+                }
+            };
+
+            continue;
         }
     }
 
     /// Invoke callback after key exchange
-    fn invoke_callback(channel: &Channel, state: &mut ConnectionState) {
+    fn invoke_callback(
+        channel: &Channel,
+        state: &mut ConnectionState,
+    ) -> Result<(), ConnectionError> {
         if !state.sent_key || !state.recv_key {
-            return;
+            return Ok(());
         }
 
         let Some(callback) = state.callback.take() else {
-            return;
+            return Ok(());
         };
 
-        callback(channel);
+        callback(channel).map_err(|_| ConnectionError::CallbackError)?;
         state.callback = None;
+
+        Ok(())
     }
 }
 

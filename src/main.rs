@@ -12,19 +12,19 @@ use encrypt::GlobalKeys;
 use tokio::net::{TcpListener, TcpStream};
 
 #[tokio::main]
-async fn main() {
+async fn main() -> anyhow::Result<()> {
     println!("eep2p 0.0.1");
 
-    let config = config::Config::setup("./eep2p.json");
+    let config = config::Config::setup("./eep2p.json")?;
     let hosts = config.hosts.clone().0;
     let port = config.port;
 
     print!("PGP passphrase: ");
-    io::stdout().flush().unwrap();
+    io::stdout().flush()?;
 
     // TODO secure input
     let mut input = String::new();
-    io::stdin().read_line(&mut input).unwrap();
+    io::stdin().read_line(&mut input)?;
 
     let keys = GlobalKeys::from(input.trim(), &config);
     let server = listen_on(port, keys.clone());
@@ -49,55 +49,52 @@ async fn main() {
                 host,
                 &keys,
                 Some(Box::new(|channel: &Channel| {
-                    println!("callback!");
+                    channel.send(Message::SendPacket(Packet::ServerboundIntentPacket(
+                        Intent::Fwd,
+                    )))?;
 
-                    channel
-                        .send(Message::SendPacket(Packet::ServerboundIntentPacket(
-                            Intent::Fwd,
-                        )))
-                        .unwrap();
+                    channel.send(Message::SendPacket(Packet::ServerboundFwdDataPacket(
+                        uuid::uuid!("67e55044-10b1-426f-9247-bb680e5fe0c8"),
+                        data,
+                    )))?;
 
-                    channel
-                        .send(Message::SendPacket(Packet::ServerboundFwdDataPacket(
-                            uuid::uuid!("67e55044-10b1-426f-9247-bb680e5fe0c8"),
-                            data,
-                        )))
-                        .unwrap();
+                    Ok(())
                 })),
             )
-            .await;
+            .await
+            .unwrap();
         }
     });
 
     // handles incoming messages
-    server.await;
-    unreachable!();
+    server.await?;
+    Ok(())
 }
 
 pub async fn message_addr(
     address: String,
     keys: &GlobalKeys,
     callback: Option<Callback>,
-) -> ConnectionInfo {
-    let stream = TcpStream::connect(address).await.unwrap();
+) -> anyhow::Result<ConnectionInfo> {
+    let stream = TcpStream::connect(address).await?;
 
     let mut con = connection::handle(stream, keys, callback);
 
     con.start();
-    con.create_channel().send(Message::StartExchange).unwrap();
-    con
+    con.create_channel().send(Message::StartExchange)?;
+    Ok(con)
 }
 
-async fn listen_on(port: u16, keys: GlobalKeys) {
-    let listener = TcpListener::bind(format!("0.0.0.0:{port}")).await.unwrap();
+async fn listen_on(port: u16, keys: GlobalKeys) -> anyhow::Result<()> {
+    let listener = TcpListener::bind(format!("0.0.0.0:{port}")).await?;
 
     loop {
-        let (stream, _) = listener.accept().await.unwrap();
+        let (stream, _) = listener.accept().await?;
         let mut con = connection::handle(stream, &keys, None);
 
         println!("Accepted connection");
 
         con.start();
-        con.create_channel().send(Message::StartExchange).unwrap();
+        con.create_channel().send(Message::StartExchange)?;
     }
 }

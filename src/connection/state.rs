@@ -1,11 +1,13 @@
-use tokio::sync::mpsc::UnboundedSender;
+use thiserror::Error;
+use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
 use crate::connection::handler::{Handler, HandlerError};
 use crate::connection::packet::Packet;
 use crate::encrypt::{EncryptError, EncryptionHandler};
 
 pub type Channel = UnboundedSender<Message>;
-pub type Callback = Box<dyn FnOnce(&Channel) + Send + Sync + 'static>;
+pub type Receiver = UnboundedReceiver<Message>;
+pub type Callback = Box<dyn FnOnce(&Channel) -> anyhow::Result<()> + Send + Sync + 'static>;
 
 pub enum Message {
     /// Begin key exchange
@@ -20,12 +22,18 @@ pub enum Message {
     EndError(ConnectionError),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum ConnectionError {
+    #[error("error while handling packet: {0}")]
     HandlerError(HandlerError),
+    #[error("error while encrypting: {0}")]
     EncryptError(EncryptError),
+    #[error("invalid packet")]
     SerializationError,
+    #[error("input/output error")]
     IOError,
+    #[error("unknown error in callback")]
+    CallbackError,
 }
 
 pub struct ConnectionState {

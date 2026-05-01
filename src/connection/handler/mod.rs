@@ -5,13 +5,16 @@ pub mod sync;
 use fwd::ForwardPacketHandler;
 use setup::SetupPacketHandler;
 use sync::SyncPacketHandler;
+use thiserror::Error;
 
 use crate::connection::{Channel, Packet};
 use crate::encrypt::EncryptionHandler;
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum HandlerError {
+    #[error("invalid packet order")]
     PacketOrderError,
+    #[error("input/output error")]
     IOError,
 }
 
