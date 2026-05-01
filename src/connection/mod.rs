@@ -14,10 +14,11 @@ use tokio_serde::formats::SymmetricalMessagePack;
 use tokio_util::codec::{FramedRead, FramedWrite, LengthDelimitedCodec};
 
 use crate::encrypt::{EncryptionHandler, GlobalKeys};
+use crate::encrypt::aes::Aes;
 
 pub struct ConnectionInfo {
     pub events: Option<UnboundedReceiver<Message>>,
-    channel: Channel,
+    pub channel: Channel,
     pub stream: Option<TcpStream>,
     pub state: Option<ConnectionState>,
 }
@@ -28,25 +29,34 @@ impl ConnectionInfo {
     }
 
     pub fn start(&mut self) {
-        let channel_a = self.create_channel();
-        let channel_b = self.create_channel();
-        let mut events = self.events.take().expect("start called twice");
         let (read, write) = self.stream.take().expect("start called twice").into_split();
+
+        self.spawn_event_handler(write);
+        self.spawn_reader(read);
+    }
+
+    fn spawn_event_handler(&mut self, write: OwnedWriteHalf) {
+        let mut events = self.events.take().expect("start called twice");
         let state = self.state.take().expect("start called twice");
+        let channel = self.create_channel();
 
         tokio::spawn(async move {
-            if let Err(e) = Self::handle(&mut events, channel_a, write, state).await {
+            if let Err(e) = Self::handle(&mut events, channel, write, state).await {
                 println!("Error in connection: {:?}", e);
             }
 
             events.close();
         });
+    }
+
+    fn spawn_reader(&mut self, read: OwnedReadHalf) {
+        let channel = self.create_channel();
 
         tokio::spawn(async move {
-            if let Err(err) = Self::read(&channel_b, read).await {
+            if let Err(err) = Self::read(&channel, read).await {
                 // we ignore the result, since an error should already be logged
                 // if the channel is closed
-                let _ = channel_b.send(Message::EndError(err));
+                let _ = channel.send(Message::EndError(err));
             }
         });
     }
