@@ -1,20 +1,23 @@
 pub mod hosts;
 pub mod id;
 
-use hosts::Hosts;
 use std::fs::{self, File};
-use std::path::Path;
 use std::io::Write;
+use std::path::Path;
+
 use aes_gcm::aead::OsRng;
+use aes_gcm::aead::rand_core::RngCore;
 use ed25519_dalek::SigningKey;
-use serde::{Serialize, Deserialize};
+use hosts::Hosts;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
-    hosts: Hosts,
-    signature: SigningKey,
-    pgp_public: String,
-    pgp_private: String
+    pub hosts: Hosts,
+    pub port: u16,
+    pub signature: SigningKey,
+    pub pgp_public: String,
+    pub pgp_private: String,
 }
 
 impl Config {
@@ -27,6 +30,8 @@ impl Config {
         if !Path::new(path).exists() {
             let config = Self {
                 hosts: Hosts(Vec::new()),
+                port: ((OsRng.next_u32() as f64 / u32::MAX as f64) * (65535.0 - 8000.0)) as u16
+                    + 8000,
                 signature: SigningKey::generate(&mut OsRng),
                 pgp_public: String::new(),
                 pgp_private: String::new(),
@@ -35,7 +40,7 @@ impl Config {
             config.write_to(path);
             panic!("First run! Please setup pgp keys at {path}.");
         }
-            
+
         Self::read_from(path)
     }
 

@@ -5,11 +5,13 @@ edition = "2024"
 
 [dependencies]
 aes-gcm = { version = "0.10.3", features = ["aes"] }
+anyhow = "1.0.102"
 ed25519-dalek = { version = "2.2.0", features = ["rand_core", "serde"] }
 futures-util = { version = "0.3.32", features = [ "sink" ] }
 generic-array = { version = "0.14.7", features = ["serde"] }
 hkdf = "0.13.0"
 ml-kem = { version = "0.3.0", features = ["getrandom"] }
+pgp = "0.19.0"
 rand = "0.10.1"
 rmp-serde = "1.3.1"
 serde = { version = "1.0.228", features = [ "derive" ] }
@@ -19,4 +21,5 @@ tokio = { version = "1", features = [ "full" ] }
 tokio-serde = { version = "0.9.0", features = [ "messagepack" ] }
 tokio-util = { version = "0.7.18", features = [ "codec" ] }
 typenum = "1.19.0"
+uuid = { version = "1.23.1", features = ["serde"] }
 x25519-dalek = { version = "2.0.1", features = [ "serde", "getrandom"] }
