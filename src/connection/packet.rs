@@ -4,7 +4,7 @@ use typenum::consts::U12;
 use uuid::Uuid;
 use x25519_dalek::PublicKey;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Packet {
     EncryptedPacket(Vec<u8>, GenericArray<u8, U12>),
 
@@ -15,7 +15,7 @@ pub enum Packet {
     ServerboundSyncPacket(Vec<String>),
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Intent {
     Fwd,
     Sync,

@@ -1,23 +1,23 @@
-use crate::connection::ConnectionInfo;
+use crate::config::data::Hosts;
+use crate::control::state::{Connection, FwdConnection};
 use timedmap::TimedMap;
 use uuid::Uuid;
 
 #[derive(Debug)]
 pub struct Registry {
-    connections: TimedMap<Uuid, Connection>,
-    fwd_connections: TimedMap<Uuid, FwdConnection>,
+    pub hosts: Hosts,
+    pub connections: TimedMap<Uuid, Connection>,
+    pub fwd_connections: TimedMap<Uuid, FwdConnection>,
+    pub target_integrity: TimedMap<Uuid, String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Connection {
-    target: String,
-    id: Uuid,
-    sock: ConnectionInfo
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct FwdConnection {
-    origin: String,
-    origin_id: Uuid,
-    target: String,
+impl Registry {
+    pub fn new(hosts: Hosts) -> Self {
+        Self {
+            hosts,
+            connections: TimedMap::new(),
+            fwd_connections: TimedMap::new(),
+            target_integrity: TimedMap::new(),
+        }
+    }
 }

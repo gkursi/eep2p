@@ -18,7 +18,7 @@ pub struct GlobalKeys {
     pgp_pass: String,
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Clone)]
 pub enum EncryptError {
     #[error("failed to derive key")]
     KeyDeriveError,

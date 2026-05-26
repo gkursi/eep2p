@@ -192,7 +192,11 @@ impl ConnectionInfo {
     }
 }
 
-pub fn handle(stream: TcpStream, keys: &GlobalKeys, callback: Option<Callback>) -> ConnectionInfo {
+pub fn handle(
+    stream: TcpStream,
+    encryption: EncryptionHandler,
+    callback: Option<Callback>,
+) -> ConnectionInfo {
     let (channel, events) = mpsc::unbounded_channel();
 
     ConnectionInfo {
@@ -200,11 +204,25 @@ pub fn handle(stream: TcpStream, keys: &GlobalKeys, callback: Option<Callback>) 
         channel,
         stream: Some(stream),
         state: Some(ConnectionState {
-            encryption: EncryptionHandler::from(keys),
+            encryption,
             handler: SetupPacketHandler::new_handler(),
             sent_key: false,
             recv_key: false,
             callback,
         }),
     }
+}
+
+pub async fn message_addr(
+    address: String,
+    keys: &GlobalKeys,
+    callback: Option<Callback>,
+) -> anyhow::Result<ConnectionInfo> {
+    let stream = TcpStream::connect(address).await?;
+
+    let mut con = handle(stream, EncryptionHandler::from(keys), callback);
+
+    con.start();
+    con.create_channel().send(Message::StartExchange)?;
+    Ok(con)
 }

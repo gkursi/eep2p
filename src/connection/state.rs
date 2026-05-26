@@ -1,3 +1,5 @@
+use std::fmt::Debug;
+
 use thiserror::Error;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
@@ -9,6 +11,7 @@ pub type Channel = UnboundedSender<Message>;
 pub type Receiver = UnboundedReceiver<Message>;
 pub type Callback = Box<dyn FnOnce(&Channel) -> anyhow::Result<()> + Send + Sync + 'static>;
 
+#[derive(Debug, Clone)]
 pub enum Message {
     /// Begin key exchange
     StartExchange,
@@ -22,7 +25,7 @@ pub enum Message {
     EndError(ConnectionError),
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Clone, Error)]
 pub enum ConnectionError {
     #[error("error while handling packet: {0}")]
     HandlerError(HandlerError),
@@ -49,4 +52,14 @@ pub struct ConnectionState {
 
     /// Called after key exchange
     pub callback: Option<Callback>,
+}
+
+impl Debug for ConnectionState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Connection({:?}, {:?}, {:?})",
+            self.handler, self.sent_key, self.recv_key
+        )
+    }
 }
