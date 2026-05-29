@@ -1,33 +1,30 @@
-use crate::connection::Channel;
-use crate::connection::handler::fwd::ForwardPacketHandler;
-use crate::connection::handler::sync::SyncPacketHandler;
-use crate::connection::handler::{Handler, HandlerError, PacketHandler};
-use crate::connection::packet::{Intent, Packet};
-use crate::encrypt::EncryptionHandler;
+use crate::handle::handlers::fwd::ForwardPacketHandler;
+use crate::handle::handlers::sync::SyncPacketHandler;
+use crate::handle::util::{
+    error::HandlerError, handler::Handler, handler::PacketHandler, state::PacketState,
+};
+use crate::net::packet::{Intent, Packet};
 
 #[derive(Clone, Copy)]
-pub struct SetupPacketHandler;
+pub struct IntentPacketHandler;
 
-impl PacketHandler for SetupPacketHandler {
+impl PacketHandler for IntentPacketHandler {
     fn new_handler() -> Handler {
-        Handler::Setup(SetupPacketHandler {})
+        Handler::Intent(IntentPacketHandler {})
     }
 
-    fn handle(
-        self,
-        packet: Packet,
-        _channel: &Channel,
-        encrypt: &mut EncryptionHandler,
-    ) -> Result<Handler, HandlerError> {
+    fn handle(self, packet: Packet, state: PacketState) -> Result<Handler, HandlerError> {
         match packet {
             Packet::CommonKeyPacket(public) => {
-                let shared = encrypt
+                let shared = state
+                    .encryption
                     .x25_secret
                     .take()
                     .expect("keys already exchanged")
                     .diffie_hellman(&public);
 
-                encrypt
+                state
+                    .encryption
                     .derive_aes(shared.as_bytes(), b"x25519-aes256gcm-v1")
                     .map_err(|_| HandlerError::IOError)?;
             }
@@ -42,6 +39,6 @@ impl PacketHandler for SetupPacketHandler {
             _ => Err(HandlerError::PacketOrderError)?,
         };
 
-        Ok(Handler::Setup(self))
+        Ok(Handler::Intent(self))
     }
 }

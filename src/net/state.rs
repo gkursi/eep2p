@@ -3,10 +3,11 @@ use std::fmt::Debug;
 use thiserror::Error;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
-use crate::connection::handler::{Handler, HandlerError};
-use crate::connection::packet::Packet;
 use crate::encrypt::{EncryptError, EncryptionHandler};
+use crate::handle::util::{error::HandlerError, handler::Handler};
+use crate::net::packet::Packet;
 
+pub type ControllerChannel = crate::control::state::Channel;
 pub type Channel = UnboundedSender<Message>;
 pub type Receiver = UnboundedReceiver<Message>;
 pub type Callback = Box<dyn FnOnce(&Channel) -> anyhow::Result<()> + Send + Sync + 'static>;

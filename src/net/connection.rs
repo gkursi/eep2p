@@ -1,29 +1,55 @@
-pub mod handler;
-pub mod packet;
-pub mod state;
-
 use futures_util::{SinkExt, TryStreamExt};
-use handler::setup::SetupPacketHandler;
-use handler::{Handler, HandlerError, PacketHandler};
-use packet::Packet;
-use state::{Callback, Channel, ConnectionError, ConnectionState, Message, Receiver};
 use tokio::net::TcpStream;
 use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
 use tokio::sync::mpsc;
 use tokio_serde::formats::SymmetricalMessagePack;
 use tokio_util::codec::{FramedRead, FramedWrite, LengthDelimitedCodec};
 
+use crate::encrypt::EncryptionHandler;
 use crate::encrypt::aes::Aes;
-use crate::encrypt::{EncryptionHandler, GlobalKeys};
+use crate::handle::handlers::setup::SetupPacketHandler;
+use crate::handle::util::handler::PacketHandler;
+use crate::handle::util::state::PacketState;
+use crate::net::packet::Packet;
+use crate::net::state::{
+    Callback, Channel, ConnectionError, ConnectionState, ControllerChannel, Message, Receiver,
+};
 
-pub struct ConnectionInfo {
+pub struct Connection {
     pub events: Option<Receiver>,
     pub channel: Channel,
     pub stream: Option<TcpStream>,
     pub state: Option<ConnectionState>,
+    pub controller: Option<ControllerChannel>,
+    pub origin: Option<String>,
 }
 
-impl ConnectionInfo {
+impl Connection {
+    pub fn new(
+        stream: TcpStream,
+        address: String,
+        encryption: EncryptionHandler,
+        controller: ControllerChannel,
+        callback: Option<Callback>,
+    ) -> Self {
+        let (channel, events) = mpsc::unbounded_channel();
+
+        Self {
+            events: Some(events),
+            channel,
+            stream: Some(stream),
+            controller: Some(controller),
+            origin: Some(address),
+            state: Some(ConnectionState {
+                encryption,
+                handler: SetupPacketHandler::new_handler(),
+                sent_key: false,
+                recv_key: false,
+                callback,
+            }),
+        }
+    }
+
     pub fn create_channel(&self) -> Channel {
         self.channel.clone()
     }
@@ -38,10 +64,11 @@ impl ConnectionInfo {
     fn spawn_event_handler(&mut self, write: OwnedWriteHalf) {
         let mut events = self.events.take().expect("start called twice");
         let state = self.state.take().expect("start called twice");
+        let controller = self.controller.take().expect("start called twice");
         let channel = self.create_channel();
 
         tokio::spawn(async move {
-            if let Err(e) = Self::handle(&mut events, channel, write, state).await {
+            if let Err(e) = Self::handle(&mut events, channel, write, controller, state).await {
                 println!("Error in connection: {e:?}");
             }
 
@@ -88,6 +115,7 @@ impl ConnectionInfo {
         events: &mut Receiver,
         input: Channel,
         output: OwnedWriteHalf,
+        controller: ControllerChannel,
         mut state: ConnectionState,
     ) -> Result<(), ConnectionError> {
         let len_delim = FramedWrite::new(output, LengthDelimitedCodec::new());
@@ -123,7 +151,15 @@ impl ConnectionInfo {
 
                     state.handler = state
                         .handler
-                        .handle(packet, &input, &mut state.encryption)
+                        .handle(
+                            packet,
+                            PacketState {
+                                origin: "", // sob
+                                channel: &input,
+                                controller: &controller,
+                                encryption: &mut state.encryption,
+                            },
+                        )
                         .map_err(ConnectionError::HandlerError)?;
                 }
 
@@ -167,8 +203,6 @@ impl ConnectionInfo {
                     return Err(err);
                 }
             };
-
-            continue;
         }
     }
 
@@ -190,39 +224,4 @@ impl ConnectionInfo {
 
         Ok(())
     }
-}
-
-pub fn handle(
-    stream: TcpStream,
-    encryption: EncryptionHandler,
-    callback: Option<Callback>,
-) -> ConnectionInfo {
-    let (channel, events) = mpsc::unbounded_channel();
-
-    ConnectionInfo {
-        events: Some(events),
-        channel,
-        stream: Some(stream),
-        state: Some(ConnectionState {
-            encryption,
-            handler: SetupPacketHandler::new_handler(),
-            sent_key: false,
-            recv_key: false,
-            callback,
-        }),
-    }
-}
-
-pub async fn message_addr(
-    address: String,
-    keys: &GlobalKeys,
-    callback: Option<Callback>,
-) -> anyhow::Result<ConnectionInfo> {
-    let stream = TcpStream::connect(address).await?;
-
-    let mut con = handle(stream, EncryptionHandler::from(keys), callback);
-
-    con.start();
-    con.create_channel().send(Message::StartExchange)?;
-    Ok(con)
 }

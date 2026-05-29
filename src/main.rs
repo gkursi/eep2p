@@ -1,15 +1,18 @@
 pub mod config;
-pub mod connection;
 pub mod control;
 pub mod encrypt;
+pub mod handle;
+pub mod net;
 
 use std::io::{self, Write};
 
 use config::Config;
-use connection::state::Message;
 use control::CommandHandler;
 use encrypt::{EncryptionHandler, GlobalKeys};
+use net::state::Message;
 use tokio::net::TcpListener;
+
+use crate::net::{connection::Connection, state::ControllerChannel};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -28,12 +31,11 @@ async fn main() -> anyhow::Result<()> {
 
     let keys = GlobalKeys::from(input.trim(), &config);
     let mut controller = CommandHandler::new(&keys, hosts);
-    let server = listen_on(port, keys.clone());
+    let server = listen_on(port, keys.clone(), controller.create_channel());
 
     println!("Your identifier: {}", config.compute_identifier());
 
     // global events
-    //
     controller.start();
 
     //
@@ -41,12 +43,22 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn listen_on(port: u16, keys: GlobalKeys) -> anyhow::Result<()> {
+async fn listen_on(
+    port: u16,
+    keys: GlobalKeys,
+    controller: ControllerChannel,
+) -> anyhow::Result<()> {
     let listener = TcpListener::bind(format!("0.0.0.0:{port}")).await?;
 
     loop {
-        let (stream, _) = listener.accept().await?;
-        let mut con = connection::handle(stream, EncryptionHandler::from(&keys), None);
+        let (stream, addr) = listener.accept().await?;
+        let mut con = Connection::new(
+            stream,
+            addr.to_string(),
+            EncryptionHandler::from(&keys),
+            controller.clone(),
+            None,
+        );
 
         println!("Accepted connection");
 

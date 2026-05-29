@@ -2,7 +2,11 @@ pub mod registry;
 pub mod state;
 
 use crate::config::data::Hosts;
-use crate::encrypt::{EncryptionHandler, GlobalKeys};
+use crate::encrypt::GlobalKeys;
+use crate::net;
+use crate::net::packet::Packet;
+use crate::net::state::Message;
+
 use registry::Registry;
 use state::{Channel, Command, ControllerError, FwdConnection, Receiver};
 use std::time::Duration;
@@ -15,7 +19,7 @@ pub struct CommandHandler {
     channel: Channel,
     receiver: Option<Receiver>,
     registry: Option<Registry>,
-    encrypt: Option<EncryptionHandler>,
+    keys: Option<GlobalKeys>,
 }
 
 impl CommandHandler {
@@ -26,7 +30,7 @@ impl CommandHandler {
             channel,
             receiver: Some(events),
             registry: Some(Registry::new(hosts)),
-            encrypt: Some(EncryptionHandler::from(keys)),
+            keys: Some(keys.clone()),
         }
     }
 
@@ -37,7 +41,7 @@ impl CommandHandler {
     pub fn start(&mut self) {
         let receiver = self.receiver.take().expect("Start called twice");
         let registry = self.registry.take().expect("Start called twice");
-        let encrypt = self.encrypt.take().expect("Start called twice");
+        let encrypt = self.keys.take().expect("Start called twice");
         let channel = self.create_channel();
 
         tokio::spawn(async move {
@@ -50,11 +54,13 @@ impl CommandHandler {
         });
     }
 
+    // todo reduce cloning
+    /// handles commands from users/connections
     async fn handle(
         mut receiver: Receiver,
         registry: Registry,
-        _channel: Channel,
-        _encrypt: EncryptionHandler,
+        channel: Channel,
+        keys: GlobalKeys,
     ) -> Result<(), ControllerError> {
         loop {
             let Some(command) = receiver.recv().await else {
@@ -62,7 +68,7 @@ impl CommandHandler {
             };
 
             match command {
-                Command::ForwardData { origin, id, .. } => {
+                Command::ForwardData { origin, id, data } => {
                     let new_id = Uuid::new_v4();
                     let fwd = FwdConnection {
                         origin,
@@ -73,13 +79,26 @@ impl CommandHandler {
                         .fwd_connections
                         .insert(new_id, fwd, Duration::from_secs(LIFETIME));
 
-                    // for host in registry.hosts {
-                    // connection::message_addr()
-                    // }
+                    let msg = Message::SendPacket(Packet::ServerboundFwdDataPacket(id, data));
 
-                    // iterate trough hosts:
-                    // send to each
-                    // add to integrity
+                    for host in &registry.hosts.0 {
+                        channel
+                            .send(Command::ForwardDataTo {
+                                target: host.clone(),
+                                msg: msg.clone(),
+                            })
+                            .map_err(|_| ControllerError::ClosedChannelError)?;
+                    }
+                }
+
+                Command::ForwardDataTo { target, msg } => {
+                    let keys = keys.clone();
+                    let channel = channel.clone();
+
+                    tokio::spawn(async move {
+                        // hosts can be offline, fails are ignored
+                        let _ = net::util::message_addr_single(&target, &keys, channel, msg).await;
+                    });
                 }
             };
         }

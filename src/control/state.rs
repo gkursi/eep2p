@@ -2,6 +2,8 @@ use thiserror::Error;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use uuid::Uuid;
 
+use crate::net::state::Message;
+
 pub type Channel = UnboundedSender<Command>;
 pub type Receiver = UnboundedReceiver<Command>;
 
@@ -17,6 +19,11 @@ pub enum Command {
         origin: String,
         id: Uuid,
         data: Vec<u8>,
+    },
+
+    ForwardDataTo {
+        target: String,
+        msg: Message,
     },
 }
 

@@ -9,6 +9,7 @@ pub enum Packet {
     EncryptedPacket(Vec<u8>, GenericArray<u8, U12>),
 
     CommonKeyPacket(PublicKey),
+    CommonEndSequencePacket,
 
     ServerboundIntentPacket(Intent),
     ServerboundFwdDataPacket(Uuid, Vec<u8>),
