@@ -5,22 +5,22 @@ use tokio::sync::mpsc;
 use tokio_serde::formats::SymmetricalMessagePack;
 use tokio_util::codec::{FramedRead, FramedWrite, LengthDelimitedCodec};
 
-use crate::encrypt::EncryptionHandler;
-use crate::encrypt::aes::Aes;
-use crate::handle::handlers::setup::SetupPacketHandler;
-use crate::handle::util::handler::PacketHandler;
-use crate::handle::util::state::PacketState;
+use crate::crypto::Cipher;
+use crate::crypto::aes::Aes;
+use crate::net::error::ConnectionError;
+use crate::net::message::Message;
 use crate::net::packet::Packet;
-use crate::net::state::{
-    Callback, Channel, ConnectionError, ConnectionState, ControllerChannel, Message, Receiver,
-};
+use crate::net::state::{Callback, Channel, ConnectionState, Receiver, RouterChannel};
+use crate::proto::handler::PacketHandler;
+use crate::proto::handlers::setup::SetupPacketHandler;
+use crate::proto::state::PacketState;
 
 pub struct Connection {
     pub events: Option<Receiver>,
     pub channel: Channel,
     pub stream: Option<TcpStream>,
     pub state: Option<ConnectionState>,
-    pub controller: Option<ControllerChannel>,
+    pub controller: Option<RouterChannel>,
     pub origin: Option<String>,
 }
 
@@ -28,8 +28,8 @@ impl Connection {
     pub fn new(
         stream: TcpStream,
         address: String,
-        encryption: EncryptionHandler,
-        controller: ControllerChannel,
+        encryption: Cipher,
+        controller: RouterChannel,
         callback: Option<Callback>,
     ) -> Self {
         let (channel, events) = mpsc::unbounded_channel();
@@ -103,7 +103,7 @@ impl Connection {
             .map_err(|_| ConnectionError::SerializationError)?
         {
             channel
-                .send(Message::Packet(packet))
+                .send(Message::HandlePacket(packet))
                 .map_err(|_| ConnectionError::IOError)?;
         }
 
@@ -115,7 +115,7 @@ impl Connection {
         events: &mut Receiver,
         input: Channel,
         output: OwnedWriteHalf,
-        controller: ControllerChannel,
+        controller: RouterChannel,
         mut state: ConnectionState,
     ) -> Result<(), ConnectionError> {
         let len_delim = FramedWrite::new(output, LengthDelimitedCodec::new());
@@ -131,7 +131,7 @@ impl Connection {
             };
 
             match msg {
-                Message::Packet(packet) => {
+                Message::HandlePacket(packet) => {
                     let mut packet = packet;
 
                     if let Packet::EncryptedPacket(bytes, nonce) = packet {

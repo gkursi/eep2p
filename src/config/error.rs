@@ -1,8 +1,4 @@
-use serde::{Deserialize, Serialize};
 use thiserror::Error;
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Hosts(pub Vec<String>);
 
 #[derive(Error, Debug)]
 pub enum ConfigError {

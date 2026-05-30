@@ -1,29 +1,25 @@
-pub mod registry;
-pub mod state;
-
-use crate::config::data::Hosts;
-use crate::encrypt::GlobalKeys;
+use super::state::Command;
+use crate::config::data::hosts::Hosts;
+use crate::crypto::CipherKeys;
 use crate::net;
+use crate::net::message::Message;
 use crate::net::packet::Packet;
-use crate::net::state::Message;
+use crate::router::connection::{Channel, ControllerError, FwdConnection, Receiver};
+use crate::router::registry::Registry;
 
-use registry::Registry;
-use state::{Channel, Command, ControllerError, FwdConnection, Receiver};
 use std::time::Duration;
 use tokio::sync::mpsc;
 use uuid::Uuid;
-
-const LIFETIME: u64 = 10 * 60;
 
 pub struct CommandHandler {
     channel: Channel,
     receiver: Option<Receiver>,
     registry: Option<Registry>,
-    keys: Option<GlobalKeys>,
+    keys: Option<CipherKeys>,
 }
 
 impl CommandHandler {
-    pub fn new(keys: &GlobalKeys, hosts: Hosts) -> Self {
+    pub fn new(keys: &CipherKeys, hosts: Hosts) -> Self {
         let (channel, events) = mpsc::unbounded_channel();
 
         CommandHandler {
@@ -48,19 +44,19 @@ impl CommandHandler {
             if let Err(e) = Self::handle(receiver, registry, channel, encrypt).await {
                 println!("An error occured while handling commands: {e:?}");
 
-                // non-recoverable, terminate all threads
+                // non-recoverable, so we terminate all threads
                 std::process::exit(1);
             }
         });
     }
 
-    // todo reduce cloning
+    // todo reduce cloning?
     /// handles commands from users/connections
     async fn handle(
         mut receiver: Receiver,
         registry: Registry,
         channel: Channel,
-        keys: GlobalKeys,
+        keys: CipherKeys,
     ) -> Result<(), ControllerError> {
         loop {
             let Some(command) = receiver.recv().await else {
@@ -68,22 +64,26 @@ impl CommandHandler {
             };
 
             match command {
-                Command::ForwardData { origin, id, data } => {
+                Command::ForwardRequest { origin, id, data } => {
+                    const MAX_REQUEST_LIFETIME_IN_SECONDS: u64 = 10 * 60;
+
                     let new_id = Uuid::new_v4();
                     let fwd = FwdConnection {
                         origin,
                         origin_id: id,
                     };
 
-                    registry
-                        .fwd_connections
-                        .insert(new_id, fwd, Duration::from_secs(LIFETIME));
+                    registry.fwd_connections.insert(
+                        new_id,
+                        fwd,
+                        Duration::from_secs(MAX_REQUEST_LIFETIME_IN_SECONDS),
+                    );
 
                     let msg = Message::SendPacket(Packet::ServerboundFwdDataPacket(id, data));
 
                     for host in &registry.hosts.0 {
                         channel
-                            .send(Command::ForwardDataTo {
+                            .send(Command::SendMessage {
                                 target: host.clone(),
                                 msg: msg.clone(),
                             })
@@ -91,7 +91,7 @@ impl CommandHandler {
                     }
                 }
 
-                Command::ForwardDataTo { target, msg } => {
+                Command::SendMessage { target, msg } => {
                     let keys = keys.clone();
                     let channel = channel.clone();
 

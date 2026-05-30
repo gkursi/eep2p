@@ -1,13 +1,14 @@
-use crate::encrypt::{EncryptionHandler, GlobalKeys};
+use crate::crypto::{Cipher, CipherKeys};
 use crate::net::connection::Connection;
-use crate::net::state::{Channel, ControllerChannel, Message};
+use crate::net::message::Message;
+use crate::net::state::{Channel, RouterChannel};
 
 use tokio::net::TcpStream;
 
 pub async fn message_addr_single(
     address: &str,
-    keys: &GlobalKeys,
-    controller: ControllerChannel,
+    keys: &CipherKeys,
+    controller: RouterChannel,
     msg: Message,
 ) -> anyhow::Result<Connection> {
     let address = address.to_string();
@@ -16,7 +17,7 @@ pub async fn message_addr_single(
     let mut con = Connection::new(
         stream,
         address,
-        EncryptionHandler::from(keys),
+        Cipher::from(keys),
         controller,
         // callback
         Some(Box::new(|ch: &Channel| {

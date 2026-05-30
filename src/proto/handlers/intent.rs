@@ -1,9 +1,9 @@
-use crate::handle::handlers::fwd::ForwardPacketHandler;
-use crate::handle::handlers::sync::SyncPacketHandler;
-use crate::handle::util::{
-    error::HandlerError, handler::Handler, handler::PacketHandler, state::PacketState,
-};
+use crate::crypto::aes::Aes;
 use crate::net::packet::{Intent, Packet};
+use crate::proto::error::HandlerError;
+use crate::proto::handlers::fwd::ForwardPacketHandler;
+use crate::proto::handlers::sync::SyncPacketHandler;
+use crate::proto::{handler::Handler, handler::PacketHandler, state::PacketState};
 
 #[derive(Clone, Copy)]
 pub struct IntentPacketHandler;
@@ -25,7 +25,7 @@ impl PacketHandler for IntentPacketHandler {
 
                 state
                     .encryption
-                    .derive_aes(shared.as_bytes(), b"x25519-aes256gcm-v1")
+                    .derive_key(shared.as_bytes(), b"x25519-aes256gcm-v1")
                     .map_err(|_| HandlerError::IOError)?;
             }
 

@@ -3,26 +3,23 @@ pub mod pgp;
 
 use ::pgp::composed::{Deserializable, SignedSecretKey};
 use ::pgp::types::Password;
-use aes_gcm::aead::KeyInit;
-use aes_gcm::{Aes256Gcm, Key};
-use hkdf::Hkdf;
-use sha2::Sha256;
+use aes_gcm::Aes256Gcm;
 use thiserror::Error;
 use x25519_dalek::{EphemeralSecret, PublicKey};
 
-use crate::Config;
+use crate::config::Config;
 
 #[derive(Clone)]
-pub struct GlobalKeys {
-    pgp_private: SignedSecretKey,
-    pgp_pass: String,
+pub struct CipherKeys {
+    pgp_private_key: SignedSecretKey,
+    pgp_passphrase: String,
 }
 
 #[derive(Debug, Error, Clone)]
 pub enum EncryptError {
     #[error("failed to derive key")]
     KeyDeriveError,
-    #[error("failed to decode pgp-encrypted message")]
+    #[error("failed to decode pgp message")]
     MessageDecodeError,
     #[error("failed to decrypt pgp message")]
     PgpDecryptError,
@@ -32,19 +29,19 @@ pub enum EncryptError {
     AesDecryptError,
 }
 
-impl GlobalKeys {
+impl CipherKeys {
     pub fn from(passwd: &str, config: &Config) -> Self {
-        let (key, _) = SignedSecretKey::from_armor_file(&config.pgp_private)
+        let (key, _) = SignedSecretKey::from_armor_file(&config.pgp.private)
             .expect("Invalid or corrupted private key");
 
         Self {
-            pgp_private: key,
-            pgp_pass: passwd.to_string(),
+            pgp_private_key: key,
+            pgp_passphrase: passwd.to_string(),
         }
     }
 }
 
-pub struct EncryptionHandler {
+pub struct Cipher {
     cipher: Option<Aes256Gcm>,
     pub x25_secret: Option<EphemeralSecret>,
     pub x25_public: Option<PublicKey>,
@@ -52,8 +49,8 @@ pub struct EncryptionHandler {
     pgp_pass: Password,
 }
 
-impl EncryptionHandler {
-    pub fn from(keys: &GlobalKeys) -> Self {
+impl Cipher {
+    pub fn from(keys: &CipherKeys) -> Self {
         let secret = EphemeralSecret::random();
         let public = PublicKey::from(&secret);
 
@@ -61,19 +58,8 @@ impl EncryptionHandler {
             cipher: None,
             x25_secret: Some(secret),
             x25_public: Some(public),
-            pgp_private: keys.pgp_private.clone(),
-            pgp_pass: keys.pgp_pass.clone().into(),
+            pgp_private: keys.pgp_private_key.clone(),
+            pgp_pass: keys.pgp_passphrase.clone().into(),
         }
-    }
-
-    pub fn derive_aes(&mut self, secret: &[u8; 32], transcript: &[u8]) -> Result<(), EncryptError> {
-        let mut key = [0u8; 32];
-        let hk = Hkdf::<Sha256>::new(Some(transcript), secret);
-
-        hk.expand(b"aes-256-gcm key", &mut key)
-            .map_err(|_| EncryptError::KeyDeriveError)?;
-        self.cipher = Some(Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(&key)));
-
-        Ok(())
     }
 }

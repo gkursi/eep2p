@@ -2,7 +2,7 @@ use thiserror::Error;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use uuid::Uuid;
 
-use crate::net::state::Message;
+use crate::router::command::state::Command;
 
 pub type Channel = UnboundedSender<Command>;
 pub type Receiver = UnboundedReceiver<Command>;
@@ -14,21 +14,7 @@ pub enum ControllerError {
 }
 
 #[derive(Debug, Clone)]
-pub enum Command {
-    ForwardData {
-        origin: String,
-        id: Uuid,
-        data: Vec<u8>,
-    },
-
-    ForwardDataTo {
-        target: String,
-        msg: Message,
-    },
-}
-
-#[derive(Debug, Clone)]
-pub struct Connection {
+pub struct ActiveConnection {
     // target: String,
     // id: Uuid,
 }

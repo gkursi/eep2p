@@ -1,48 +1,19 @@
 use std::fmt::Debug;
 
-use thiserror::Error;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
-use crate::encrypt::{EncryptError, EncryptionHandler};
-use crate::handle::util::{error::HandlerError, handler::Handler};
-use crate::net::packet::Packet;
+use crate::crypto::Cipher;
+use crate::net::message::Message;
+use crate::proto::handler::Handler;
 
-pub type ControllerChannel = crate::control::state::Channel;
+pub type RouterChannel = crate::router::connection::Channel;
 pub type Channel = UnboundedSender<Message>;
 pub type Receiver = UnboundedReceiver<Message>;
 pub type Callback = Box<dyn FnOnce(&Channel) -> anyhow::Result<()> + Send + Sync + 'static>;
 
-#[derive(Debug, Clone)]
-pub enum Message {
-    /// Begin key exchange
-    StartExchange,
-    /// Handle packet
-    Packet(Packet),
-    /// Send packet
-    SendPacket(Packet),
-    /// Close connection
-    End,
-    /// Close connection with an error
-    EndError(ConnectionError),
-}
-
-#[derive(Debug, Clone, Error)]
-pub enum ConnectionError {
-    #[error("error while handling packet: {0}")]
-    HandlerError(HandlerError),
-    #[error("error while encrypting: {0}")]
-    EncryptError(EncryptError),
-    #[error("invalid packet")]
-    SerializationError,
-    #[error("input/output error")]
-    IOError,
-    #[error("unknown error in callback")]
-    CallbackError,
-}
-
 pub struct ConnectionState {
     /// Encryption handler
-    pub encryption: EncryptionHandler,
+    pub encryption: Cipher,
     /// Packet handler
     pub handler: Handler,
 

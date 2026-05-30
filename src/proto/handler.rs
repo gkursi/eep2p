@@ -1,12 +1,12 @@
 use std::fmt::Debug;
 
-use crate::handle::handlers::fwd::ForwardPacketHandler;
-use crate::handle::handlers::intent::IntentPacketHandler;
-use crate::handle::handlers::setup::SetupPacketHandler;
-use crate::handle::handlers::sync::SyncPacketHandler;
-use crate::handle::util::error::HandlerError;
-use crate::handle::util::state::PacketState;
 use crate::net::packet::Packet;
+use crate::proto::error::HandlerError;
+use crate::proto::handlers::fwd::ForwardPacketHandler;
+use crate::proto::handlers::intent::IntentPacketHandler;
+use crate::proto::handlers::setup::SetupPacketHandler;
+use crate::proto::handlers::sync::SyncPacketHandler;
+use crate::proto::state::PacketState;
 
 pub enum Handler {
     Encrypt(SetupPacketHandler),
@@ -17,7 +17,6 @@ pub enum Handler {
 
 pub trait PacketHandler {
     fn new_handler() -> Handler;
-
     fn handle(self, packet: Packet, state: PacketState) -> Result<Handler, HandlerError>;
 }
 

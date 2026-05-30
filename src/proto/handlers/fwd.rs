@@ -1,8 +1,9 @@
-use crate::control::state::Command;
-use crate::handle::handlers::intent::IntentPacketHandler;
-use crate::handle::util::state::PacketState;
-use crate::handle::util::{error::HandlerError, handler::Handler, handler::PacketHandler};
-use crate::net::{packet::Packet, state::Message};
+use crate::net::{message::Message, packet::Packet};
+use crate::proto::error::HandlerError;
+use crate::proto::handlers::intent::IntentPacketHandler;
+use crate::proto::state::PacketState;
+use crate::proto::{handler::Handler, handler::PacketHandler};
+use crate::router::command::state::Command;
 
 #[derive(Clone, Copy)]
 pub struct ForwardPacketHandler;
@@ -17,12 +18,12 @@ impl PacketHandler for ForwardPacketHandler {
             Packet::ServerboundFwdDataPacket(id, data) => {
                 state
                     .channel
-                    .send(Message::Packet(Packet::CommonEndSequencePacket))
+                    .send(Message::HandlePacket(Packet::CommonEndSequencePacket))
                     .map_err(|_| HandlerError::IOError)?;
 
                 state
                     .controller
-                    .send(Command::ForwardData {
+                    .send(Command::ForwardRequest {
                         origin: state.origin.to_string(),
                         id,
                         data,

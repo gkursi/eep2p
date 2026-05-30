@@ -1,8 +1,8 @@
-use crate::handle::handlers::intent::IntentPacketHandler;
-use crate::handle::util::state::PacketState;
+use crate::proto::handlers::intent::IntentPacketHandler;
+use crate::proto::state::PacketState;
 use crate::{
-    handle::util::error::HandlerError, handle::util::handler::Handler,
-    handle::util::handler::PacketHandler, net::packet::Packet, net::state::Message,
+    net::message::Message, net::packet::Packet, proto::error::HandlerError,
+    proto::handler::Handler, proto::handler::PacketHandler,
 };
 
 #[derive(Clone, Copy)]
@@ -20,7 +20,7 @@ impl PacketHandler for SyncPacketHandler {
 
                 state
                     .channel
-                    .send(Message::Packet(Packet::CommonEndSequencePacket))
+                    .send(Message::HandlePacket(Packet::CommonEndSequencePacket))
                     .map_err(|_| HandlerError::IOError)?;
             }
 
