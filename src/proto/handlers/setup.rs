@@ -1,7 +1,7 @@
 use crate::crypto::aes::Aes;
-use crate::net::packet::Packet;
 use crate::proto::error::HandlerError;
 use crate::proto::handlers::intent::IntentPacketHandler;
+use crate::proto::packet::Packet;
 use crate::proto::{handler::Handler, handler::PacketHandler, state::PacketState};
 
 #[derive(Clone, Copy)]
@@ -14,7 +14,7 @@ impl PacketHandler for SetupPacketHandler {
 
     fn handle(self, packet: Packet, state: PacketState) -> Result<Handler, HandlerError> {
         match packet {
-            Packet::CommonKeyPacket(public) => {
+            Packet::KeyExchange(public) => {
                 let shared = state
                     .encryption
                     .x25_secret

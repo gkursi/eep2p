@@ -1,6 +1,7 @@
-use crate::net::{message::Message, packet::Packet};
+use crate::net::message::Message;
 use crate::proto::error::HandlerError;
 use crate::proto::handlers::intent::IntentPacketHandler;
+use crate::proto::packet::Packet;
 use crate::proto::state::PacketState;
 use crate::proto::{handler::Handler, handler::PacketHandler};
 use crate::router::command::state::Command;
@@ -15,10 +16,10 @@ impl PacketHandler for ForwardPacketHandler {
 
     fn handle(self, packet: Packet, state: PacketState) -> Result<Handler, HandlerError> {
         match packet {
-            Packet::ServerboundFwdDataPacket(id, data) => {
+            Packet::ServerboundForwardData(id, data) => {
                 state
                     .channel
-                    .send(Message::HandlePacket(Packet::CommonEndSequencePacket))
+                    .send(Message::HandlePacket(Packet::EndSequence))
                     .map_err(|_| HandlerError::IOError)?;
 
                 state

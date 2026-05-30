@@ -6,4 +6,6 @@ pub enum ConfigError {
     IOError,
     #[error("failed to parse config file")]
     ParseError,
+    #[error("first run, set up keys at `{0}`")]
+    PartialConfigError(String),
 }

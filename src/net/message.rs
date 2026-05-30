@@ -1,5 +1,5 @@
 use crate::net::error::ConnectionError;
-use crate::net::packet::Packet;
+use crate::proto::packet::Packet;
 
 #[derive(Debug, Clone)]
 pub enum Message {

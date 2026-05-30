@@ -17,7 +17,7 @@ pub async fn message_addr_single(
     let mut con = Connection::new(
         stream,
         address,
-        Cipher::from(keys),
+        Cipher::new(keys),
         controller,
         // callback
         Some(Box::new(|ch: &Channel| {

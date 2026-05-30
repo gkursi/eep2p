@@ -34,12 +34,11 @@ impl Config {
             hosts: Hosts(Vec::new()),
             signature: SigningKey::generate(&mut OsRng),
             pgp: PgpKey::empty(),
-            port: ((f64::from(OsRng.next_u32()) / f64::from(u32::MAX)) * (65535.0 - 8000.0)) as u16
-                + 8000,
+            port: (OsRng.next_u32() % (65535 - 8000)) as u16 + 8000,
         };
 
         config.write(path)?;
-        panic!("First run! Please setup pgp keys at {path}.");
+        Err(ConfigError::PartialConfigError(path.to_string()))
     }
 
     pub fn write(&self, path: &str) -> Result<(), ConfigError> {
@@ -51,7 +50,7 @@ impl Config {
     }
 
     pub fn compute_identifier(&self) -> String {
-        // TODO base64 of signature + public pgp key
+        // todo base64 of signature + public pgp key
         String::new()
     }
 }

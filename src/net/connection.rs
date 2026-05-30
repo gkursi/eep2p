@@ -9,10 +9,10 @@ use crate::crypto::Cipher;
 use crate::crypto::aes::Aes;
 use crate::net::error::ConnectionError;
 use crate::net::message::Message;
-use crate::net::packet::Packet;
 use crate::net::state::{Callback, Channel, ConnectionState, Receiver, RouterChannel};
 use crate::proto::handler::PacketHandler;
 use crate::proto::handlers::setup::SetupPacketHandler;
+use crate::proto::packet::Packet;
 use crate::proto::state::PacketState;
 
 pub struct Connection {
@@ -134,7 +134,7 @@ impl Connection {
                 Message::HandlePacket(packet) => {
                     let mut packet = packet;
 
-                    if let Packet::EncryptedPacket(bytes, nonce) = packet {
+                    if let Packet::Encrypted(bytes, nonce) = packet {
                         let bytes = state
                             .encryption
                             .decrypt(&bytes, nonce)
@@ -144,7 +144,7 @@ impl Connection {
                             .map_err(|_| ConnectionError::SerializationError)?;
                     }
 
-                    if let Packet::CommonKeyPacket(_) = packet {
+                    if let Packet::KeyExchange(_) = packet {
                         state.recv_key = true;
                         Self::invoke_callback(&input, &mut state)?;
                     }
@@ -165,7 +165,7 @@ impl Connection {
 
                 Message::StartExchange => {
                     serialize
-                        .send(Packet::CommonKeyPacket(
+                        .send(Packet::KeyExchange(
                             state
                                 .encryption
                                 .x25_public
@@ -189,7 +189,7 @@ impl Connection {
                         .map_err(ConnectionError::EncryptError)?;
 
                     serialize
-                        .send(Packet::EncryptedPacket(n, d))
+                        .send(Packet::Encrypted(n, d))
                         .await
                         .map_err(|_| ConnectionError::IOError)?
                 }
@@ -220,7 +220,6 @@ impl Connection {
         };
 
         callback(channel).map_err(|_| ConnectionError::CallbackError)?;
-        state.callback = None;
 
         Ok(())
     }

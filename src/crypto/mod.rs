@@ -16,7 +16,7 @@ pub struct CipherKeys {
 }
 
 #[derive(Debug, Error, Clone)]
-pub enum EncryptError {
+pub enum CypherError {
     #[error("failed to derive key")]
     KeyDeriveError,
     #[error("failed to decode pgp message")]
@@ -27,10 +27,12 @@ pub enum EncryptError {
     AesEncryptError,
     #[error("failed to decrypt with aes")]
     AesDecryptError,
+    #[error("cypher called too early")]
+    EarlyCallError,
 }
 
 impl CipherKeys {
-    pub fn from(passwd: &str, config: &Config) -> Self {
+    pub fn new(passwd: &str, config: &Config) -> Self {
         let (key, _) = SignedSecretKey::from_armor_file(&config.pgp.private)
             .expect("Invalid or corrupted private key");
 
@@ -50,7 +52,7 @@ pub struct Cipher {
 }
 
 impl Cipher {
-    pub fn from(keys: &CipherKeys) -> Self {
+    pub fn new(keys: &CipherKeys) -> Self {
         let secret = EphemeralSecret::random();
         let public = PublicKey::from(&secret);
 

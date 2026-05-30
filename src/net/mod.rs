@@ -1,7 +1,6 @@
 pub mod connection;
 pub mod error;
 pub mod message;
-pub mod packet;
 pub mod state;
 pub mod util;
 

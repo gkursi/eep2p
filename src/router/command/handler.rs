@@ -3,7 +3,7 @@ use crate::config::data::hosts::Hosts;
 use crate::crypto::CipherKeys;
 use crate::net;
 use crate::net::message::Message;
-use crate::net::packet::Packet;
+use crate::proto::packet::Packet;
 use crate::router::connection::{Channel, ControllerError, FwdConnection, Receiver};
 use crate::router::registry::Registry;
 
@@ -79,7 +79,7 @@ impl CommandHandler {
                         Duration::from_secs(MAX_REQUEST_LIFETIME_IN_SECONDS),
                     );
 
-                    let msg = Message::SendPacket(Packet::ServerboundFwdDataPacket(id, data));
+                    let msg = Message::SendPacket(Packet::ServerboundForwardData(id, data));
 
                     for host in &registry.hosts.0 {
                         channel

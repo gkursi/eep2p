@@ -29,7 +29,7 @@ async fn main() -> anyhow::Result<()> {
     let mut input = String::new();
     io::stdin().read_line(&mut input)?;
 
-    let keys = CipherKeys::from(input.trim(), &config);
+    let keys = CipherKeys::new(input.trim(), &config);
     let mut controller = CommandHandler::new(&keys, hosts);
     let server = listen_on(port, keys.clone(), controller.create_channel());
 
@@ -51,7 +51,7 @@ async fn listen_on(port: u16, keys: CipherKeys, controller: RouterChannel) -> an
         let mut con = Connection::new(
             stream,
             addr.to_string(),
-            Cipher::from(&keys),
+            Cipher::new(&keys),
             controller.clone(),
             None,
         );

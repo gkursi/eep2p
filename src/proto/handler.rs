@@ -1,11 +1,11 @@
 use std::fmt::Debug;
 
-use crate::net::packet::Packet;
 use crate::proto::error::HandlerError;
 use crate::proto::handlers::fwd::ForwardPacketHandler;
 use crate::proto::handlers::intent::IntentPacketHandler;
 use crate::proto::handlers::setup::SetupPacketHandler;
 use crate::proto::handlers::sync::SyncPacketHandler;
+use crate::proto::packet::Packet;
 use crate::proto::state::PacketState;
 
 pub enum Handler {
