@@ -7,13 +7,12 @@ use tokio_util::codec::{FramedRead, FramedWrite, LengthDelimitedCodec};
 
 use crate::crypto::Cipher;
 use crate::crypto::aes::Aes;
-use crate::net::error::ConnectionError;
+use crate::net::error::ConnectionHandleError;
 use crate::net::message::Message;
-use crate::net::state::{Callback, Channel, ConnectionState, Receiver, RouterChannel};
-use crate::proto::handler::PacketHandler;
-use crate::proto::handlers::setup::SetupPacketHandler;
-use crate::proto::packet::Packet;
-use crate::proto::state::PacketState;
+use crate::net::state::{Channel, ConnectionState, Receiver, RouterChannel};
+use crate::protocol::packet::{OuterPacket, Packet};
+use crate::protocol::state::PacketState;
+use crate::sequence::splitter::SequenceSplitter;
 
 pub struct Connection {
     pub events: Option<Receiver>,
@@ -30,7 +29,6 @@ impl Connection {
         address: String,
         encryption: Cipher,
         controller: RouterChannel,
-        callback: Option<Callback>,
     ) -> Self {
         let (channel, events) = mpsc::unbounded_channel();
 
@@ -42,10 +40,7 @@ impl Connection {
             origin: Some(address),
             state: Some(ConnectionState {
                 encryption,
-                handler: SetupPacketHandler::new_handler(),
-                sent_key: false,
-                recv_key: false,
-                callback,
+                handler: SequenceSplitter::new(),
             }),
         }
     }
@@ -89,22 +84,22 @@ impl Connection {
     }
 
     /// Receives packets
-    async fn read(channel: &Channel, input: OwnedReadHalf) -> Result<(), ConnectionError> {
+    async fn read(channel: &Channel, input: OwnedReadHalf) -> Result<(), ConnectionHandleError> {
         let len_delim = FramedRead::new(input, LengthDelimitedCodec::new());
 
         let mut deserialize = tokio_serde::SymmetricallyFramed::new(
             len_delim,
-            SymmetricalMessagePack::<Packet>::default(),
+            SymmetricalMessagePack::<OuterPacket>::default(),
         );
 
         while let Some(packet) = deserialize
             .try_next()
             .await
-            .map_err(|_| ConnectionError::SerializationError)?
+            .map_err(|_| ConnectionHandleError::SerializationError)?
         {
             channel
                 .send(Message::HandlePacket(packet))
-                .map_err(|_| ConnectionError::IOError)?;
+                .map_err(|_| ConnectionHandleError::IOError)?;
         }
 
         Ok(())
@@ -117,12 +112,12 @@ impl Connection {
         output: OwnedWriteHalf,
         controller: RouterChannel,
         mut state: ConnectionState,
-    ) -> Result<(), ConnectionError> {
+    ) -> Result<(), ConnectionHandleError> {
         let len_delim = FramedWrite::new(output, LengthDelimitedCodec::new());
 
         let mut serialize = tokio_serde::SymmetricallyFramed::new(
             len_delim,
-            SymmetricalMessagePack::<Packet>::default(),
+            SymmetricalMessagePack::<OuterPacket>::default(),
         );
 
         loop {
@@ -134,64 +129,59 @@ impl Connection {
                 Message::HandlePacket(packet) => {
                     let mut packet = packet;
 
-                    if let Packet::Encrypted(bytes, nonce) = packet {
+                    if let Packet::Encrypted(bytes, nonce) = packet.peek() {
                         let bytes = state
                             .encryption
-                            .decrypt(&bytes, nonce)
-                            .map_err(ConnectionError::EncryptError)?;
+                            .decrypt(&bytes, *nonce)
+                            .map_err(ConnectionHandleError::EncryptError)?;
 
-                        packet = rmp_serde::from_slice::<Packet>(&bytes)
-                            .map_err(|_| ConnectionError::SerializationError)?;
+                        packet = rmp_serde::from_slice::<OuterPacket>(&bytes)
+                            .map_err(|_| ConnectionHandleError::SerializationError)?;
                     }
 
-                    if let Packet::KeyExchange(_) = packet {
-                        state.recv_key = true;
-                        Self::invoke_callback(&input, &mut state)?;
-                    }
-
-                    state.handler = state
+                    state
                         .handler
-                        .handle(
+                        .handle_packet(
                             packet,
                             PacketState {
-                                origin: "", // sob
+                                origin: "", // :p
                                 channel: &input,
                                 controller: &controller,
                                 encryption: &mut state.encryption,
+                                handler: None,
                             },
                         )
-                        .map_err(ConnectionError::HandlerError)?;
-                }
-
-                Message::StartExchange => {
-                    serialize
-                        .send(Packet::KeyExchange(
-                            state
-                                .encryption
-                                .x25_public
-                                .take()
-                                .expect("StartExchange sent twice"),
-                        ))
-                        .await
-                        .map_err(|_| ConnectionError::SerializationError)?;
-
-                    state.sent_key = true;
-                    Self::invoke_callback(&input, &mut state)?;
+                        .map_err(ConnectionHandleError::HandlerError)?;
                 }
 
                 Message::SendPacket(p) => {
-                    let (d, n) = state
+                    let (n, d) = state
                         .encryption
                         .encrypt(
                             &rmp_serde::to_vec(&p)
-                                .map_err(|_| ConnectionError::SerializationError)?,
+                                .map_err(|_| ConnectionHandleError::SerializationError)?,
                         )
-                        .map_err(ConnectionError::EncryptError)?;
+                        .map_err(ConnectionHandleError::EncryptError)?;
 
                     serialize
-                        .send(Packet::Encrypted(n, d))
+                        .send(Packet::new_encrypted(d, n))
                         .await
-                        .map_err(|_| ConnectionError::IOError)?
+                        .map_err(|_| ConnectionHandleError::IOError)?
+                }
+
+                Message::SendPacketDirect(p) => serialize
+                    .send(p)
+                    .await
+                    .map_err(|_| ConnectionHandleError::IOError)?,
+
+                Message::ExecuteTask(task) => {
+                    task.call(PacketState {
+                        origin: "", // bleh
+                        channel: &input,
+                        controller: &controller,
+                        encryption: &mut state.encryption,
+                        handler: Some(&mut state.handler),
+                    })?;
                 }
 
                 Message::End => {
@@ -204,23 +194,5 @@ impl Connection {
                 }
             };
         }
-    }
-
-    /// Invoke callback after key exchange
-    fn invoke_callback(
-        channel: &Channel,
-        state: &mut ConnectionState,
-    ) -> Result<(), ConnectionError> {
-        if !state.sent_key || !state.recv_key {
-            return Ok(());
-        }
-
-        let Some(callback) = state.callback.take() else {
-            return Ok(());
-        };
-
-        callback(channel).map_err(|_| ConnectionError::CallbackError)?;
-
-        Ok(())
     }
 }

@@ -1,15 +1,13 @@
+use tokio::sync::mpsc;
+
 use super::state::Command;
 use crate::config::data::hosts::Hosts;
 use crate::crypto::CipherKeys;
-use crate::net;
 use crate::net::message::Message;
-use crate::proto::packet::Packet;
-use crate::router::connection::{Channel, ControllerError, FwdConnection, Receiver};
+use crate::net::util;
+use crate::router::connection::{Channel, Receiver};
+use crate::router::error::RouterError;
 use crate::router::registry::Registry;
-
-use std::time::Duration;
-use tokio::sync::mpsc;
-use uuid::Uuid;
 
 pub struct CommandHandler {
     channel: Channel,
@@ -50,55 +48,33 @@ impl CommandHandler {
         });
     }
 
-    // todo reduce cloning?
     /// handles commands from users/connections
     async fn handle(
         mut receiver: Receiver,
-        registry: Registry,
+        mut registry: Registry,
         channel: Channel,
         keys: CipherKeys,
-    ) -> Result<(), ControllerError> {
+    ) -> Result<(), RouterError> {
         loop {
             let Some(command) = receiver.recv().await else {
-                return Err(ControllerError::ClosedChannelError);
+                return Err(RouterError::ClosedChannelError);
             };
 
             match command {
-                Command::ForwardRequest { origin, id, data } => {
-                    const MAX_REQUEST_LIFETIME_IN_SECONDS: u64 = 10 * 60;
-
-                    let new_id = Uuid::new_v4();
-                    let fwd = FwdConnection {
-                        origin,
-                        origin_id: id,
-                    };
-
-                    registry.fwd_connections.insert(
-                        new_id,
-                        fwd,
-                        Duration::from_secs(MAX_REQUEST_LIFETIME_IN_SECONDS),
-                    );
-
-                    let msg = Message::SendPacket(Packet::ServerboundForwardData(id, data));
-
-                    for host in &registry.hosts.0 {
-                        channel
-                            .send(Command::SendMessage {
-                                target: host.clone(),
-                                msg: msg.clone(),
-                            })
-                            .map_err(|_| ControllerError::ClosedChannelError)?;
+                Command::TryOpenConnection { target } => {
+                    // the host can be offline, so we simply log a warning
+                    if let Err(err) = util::open_connection(&target, &keys, channel.clone()).await {
+                        println!("failed connection to {target}: {err:?}")
                     }
                 }
 
-                Command::SendMessage { target, msg } => {
-                    let keys = keys.clone();
-                    let channel = channel.clone();
+                Command::AddConnection { origin, channel } => {
+                    let Some(c) = registry.connections.insert(origin, channel) else {
+                        continue;
+                    };
 
-                    tokio::spawn(async move {
-                        // hosts can be offline, fails are ignored
-                        let _ = net::util::message_addr_single(&target, &keys, channel, msg).await;
-                    });
+                    // close any old channels
+                    let _ = c.send(Message::End);
                 }
             };
         }

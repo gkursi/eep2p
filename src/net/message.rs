@@ -1,17 +1,20 @@
-use crate::net::error::ConnectionError;
-use crate::proto::packet::Packet;
+use crate::net::error::ConnectionHandleError;
+use crate::net::task::Task;
+use crate::protocol::packet::OuterPacket;
 
 #[derive(Debug, Clone)]
 pub enum Message {
-    HandlePacket(Packet),
-    SendPacket(Packet),
+    HandlePacket(OuterPacket),
+    /// Send a packet with encryption
+    SendPacket(OuterPacket),
+    /// Send a packet without encryption
+    SendPacketDirect(OuterPacket),
 
-    /// Begin key exchange
-    StartExchange,
+    ExecuteTask(Task),
 
     /// Close connection
     End,
 
     /// Close connection with an error
-    EndError(ConnectionError),
+    EndError(ConnectionHandleError),
 }

@@ -2,14 +2,14 @@ use std::fs::{self, File};
 use std::io::Write;
 use std::path::Path;
 
-use crate::config::data::pgp::PgpKey;
-
-use super::data::hosts::Hosts;
-use super::error::ConfigError;
 use aes_gcm::aead::OsRng;
 use aes_gcm::aead::rand_core::RngCore;
 use ed25519_dalek::SigningKey;
 use serde::{Deserialize, Serialize};
+
+use super::data::hosts::Hosts;
+use super::error::ConfigError;
+use crate::config::data::pgp::PgpKey;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {

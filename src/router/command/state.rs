@@ -1,17 +1,8 @@
-use uuid::Uuid;
-
-use crate::net::message::Message;
+use crate::net::state::Channel;
 
 #[derive(Debug, Clone)]
 pub enum Command {
-    ForwardRequest {
-        origin: String,
-        id: Uuid,
-        data: Vec<u8>,
-    },
+    TryOpenConnection { target: String },
 
-    SendMessage {
-        target: String,
-        msg: Message,
-    },
+    AddConnection { origin: String, channel: Channel },
 }
